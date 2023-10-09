@@ -25,6 +25,7 @@ import re
 import urllib.parse
 
 # for testing purpose
+import ssl
 
 BYTES_TO_READ = 4096
 def help():
@@ -43,18 +44,6 @@ class HTTPClient(object):
         self.socket.connect((host, port))
         return None
 
-    def get_code(self, data):
-        return None
-
-    def get_headers(self,data):
-        return None
-
-    def get_body(self, data):
-        return None
-    
-    def sendall(self, data):
-        self.socket.sendall(data.encode('utf-8'))
-        
     def close(self):
         self.socket.close()
 
@@ -62,8 +51,21 @@ class HTTPClient(object):
     def recvall(self, sock):
         buffer = bytearray()
         done = False
+        handle_301 = {}
         while not done:
-            part = sock.recv(1024)
+            part = sock.recv(BYTES_TO_READ)
+            print(part)
+            code = self.__parse_server_response(part.decode('utf-8'))['heads'][0].split()[1]
+            if int(code) == 301:
+                part = part.decode('utf-8')
+                part = part.split('\r\n')
+                for line in part:
+                    if line.startswith("Location: "):
+                        new_location = line[len("Location: "):]
+                        handle_301['has_301'] = True
+                        handle_301['url'] = new_location
+                        self.close()
+                        return handle_301
             if (part):
                 buffer.extend(part)
             else:
@@ -73,27 +75,56 @@ class HTTPClient(object):
     def GET(self, url, args=None):
         o=urllib.parse.urlparse(url)
         host = o.hostname
-        port = o.port
-        path = o.path
+        port = o.port or 80
+        path = o.path or '/'
+        scheme = o.scheme
         self.connect(host,port)
-        request = b"GET "+ path.encode('utf-8') +b" HTTP/1.1\nHOST: " + host.encode('utf-8') + b"\n\n"
-        self.socket.send(request)
-        self.socket.shutdown(socket.SHUT_WR)
-        results_txt = b''
-        results=(self.socket.recv(BYTES_TO_READ))
-        results_txt += results
-        while(len(results)>0):
-            results = self.socket.recv(BYTES_TO_READ)
-            results_txt += results
-        results_txt = results_txt.decode('utf-8')
+        if scheme == 'http':
+            request = f'GET {path} HTTP/1.1\r\n'
+        elif scheme == 'https':
+            context = ssl.create_default_context()
+            ssl_socket = context.wrap_socket(self.socket, server_hostname=host)
+            request = f'GET {path} HTTP/1.1\r\n'
+        request += f'HOST: {host}:{port}\r\n'
+        request += '\r\n'
+        print(request)
+        if scheme == 'https':
+            ssl_socket.send(request.encode('utf-8'))
+        elif scheme == 'http':
+            self.socket.send(request.encode('utf-8'))
+        results_txt = self.recvall(self.socket)
+        self.close()
+        if type(results_txt) == dict:
+            return self.GET(results_txt['url'])
         parse_result = self.__parse_server_response(results_txt)
         code = int(parse_result['heads'][0].split()[1])
         body = parse_result['body']
         return HTTPResponse(code, body)
 
     def POST(self, url, args=None):
-        code = 500
-        body = ""
+        o=urllib.parse.urlparse(url)
+        host = o.hostname
+        port = o.port or 80
+        path = o.path or '/'
+        self.connect(host,port)
+        encoded_data = None
+        if args != None:
+            encoded_data = urllib.parse.urlencode(args)
+        request = f'POST {path} HTTP/1.1\r\n'
+        request += f'HOST: {host}:{port}\r\n'
+        request += "Content-Type: application/x-www-form-urlencoded\r\n"
+        if args == None:
+            request += f"Content-Length: 0\r\n"
+        else:
+            request += f"Content-Length: {len(encoded_data)}\r\n"
+        request += "\r\n" 
+        if args != None:
+            request += encoded_data
+        self.socket.send(request.encode('utf-8'))
+        results_txt = self.recvall(self.socket)
+        parse_result = self.__parse_server_response(results_txt)
+        code = int(parse_result['heads'][0].split()[1])
+        body = parse_result['body']
         return HTTPResponse(code, body)
 
     def command(self, url, command="GET", args=None):
