@@ -24,6 +24,9 @@ import re
 # you may use urllib to encode data appropriately
 import urllib.parse
 
+# for testing purpose
+
+BYTES_TO_READ = 4096
 def help():
     print("httpclient.py [GET/POST] [URL]\n")
 
@@ -68,8 +71,24 @@ class HTTPClient(object):
         return buffer.decode('utf-8')
 
     def GET(self, url, args=None):
-        code = 500
-        body = ""
+        o=urllib.parse.urlparse(url)
+        host = o.hostname
+        port = o.port
+        path = o.path
+        self.connect(host,port)
+        request = b"GET "+ path.encode('utf-8') +b" HTTP/1.1\nHOST: " + host.encode('utf-8') + b"\n\n"
+        self.socket.send(request)
+        self.socket.shutdown(socket.SHUT_WR)
+        results_txt = b''
+        results=(self.socket.recv(BYTES_TO_READ))
+        results_txt += results
+        while(len(results)>0):
+            results = self.socket.recv(BYTES_TO_READ)
+            results_txt += results
+        results_txt = results_txt.decode('utf-8')
+        parse_result = self.__parse_server_response(results_txt)
+        code = int(parse_result['heads'][0].split()[1])
+        body = parse_result['body']
         return HTTPResponse(code, body)
 
     def POST(self, url, args=None):
@@ -82,6 +101,17 @@ class HTTPClient(object):
             return self.POST( url, args )
         else:
             return self.GET( url, args )
+        
+    def __parse_server_response(self, response:str) -> dict:
+        header_end = response.find('\r\n\r\n')
+        headers = response[:header_end]
+        content = response[header_end + 4:]
+        header_lines = headers.split('\r\n')
+        result = {}
+        result['heads'] = header_lines
+        result['body'] = content
+        return result 
+        
     
 if __name__ == "__main__":
     client = HTTPClient()
