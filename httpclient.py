@@ -25,7 +25,6 @@ import re
 import urllib.parse
 
 # for testing purpose
-import ssl
 
 BYTES_TO_READ = 4096
 def help():
@@ -51,26 +50,35 @@ class HTTPClient(object):
     def recvall(self, sock):
         buffer = bytearray()
         done = False
-        handle_301 = {}
-        while not done:
+        part = sock.recv(BYTES_TO_READ)
+        buffer.extend(part)
+        response = self.__parse_server_response(part.decode('utf-8'))
+        header_lines= response['heads'] 
+        if not self.__recvall_helper("Content-Length: ", header_lines): # not content-length provided
+            while not done:
+                part = sock.recv(BYTES_TO_READ)
+                if (part):
+                    buffer.extend(part)
+                else:
+                    done = True
+            return buffer.decode('utf-8') 
+        for line in header_lines:
+            if line.startswith("Content-Length: "):
+                content_length = int(line[len("Content-Length: "):])
+                break
+        content_length -= len(response['body'])
+        while content_length > 0:
             part = sock.recv(BYTES_TO_READ)
-            print(part)
-            # code = self.__parse_server_response(part.decode('utf-8'))['heads'][0].split()[1]
-            # if int(code) == 301:
-            #     part = part.decode('utf-8')
-            #     part = part.split('\r\n')
-            #     for line in part:
-            #         if line.startswith("Location: "):
-            #             new_location = line[len("Location: "):]
-            #             handle_301['has_301'] = True
-            #             handle_301['url'] = new_location
-            #             self.close()
-            #             return handle_301
-            if (part):
-                buffer.extend(part)
-            else:
-                done = not part
+            buffer.extend(part)
+            content_length -= len(part) 
         return buffer.decode('utf-8')
+    
+    def __recvall_helper(self, content: str, lst: list):
+        result = False
+        for line in lst:
+            if content in line:
+                return True
+        return result 
 
     def GET(self, url, args=None):
         o=urllib.parse.urlparse(url)
