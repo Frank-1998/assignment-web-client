@@ -36,7 +36,6 @@ class HTTPResponse(object):
         self.body = body
 
 class HTTPClient(object):
-    #def get_host_port(self,url):
 
     def connect(self, host, port):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -54,7 +53,7 @@ class HTTPClient(object):
         buffer.extend(part)
         response = self.__parse_server_response(part.decode('utf-8'))
         header_lines= response['heads'] 
-        if not self.__recvall_helper("Content-Length: ", header_lines): # not content-length provided
+        if not self.__recvall_helper("Content-Length: ", header_lines): # no content-length provided
             while not done:
                 part = sock.recv(BYTES_TO_READ)
                 if (part):
@@ -74,6 +73,7 @@ class HTTPClient(object):
         return buffer.decode('utf-8')
     
     def __recvall_helper(self, content: str, lst: list):
+        #check if a substirng is in a list of strings
         result = False
         for line in lst:
             if content in line:
@@ -85,23 +85,18 @@ class HTTPClient(object):
         host = o.hostname
         port = o.port or 80
         path = o.path or '/'
-        scheme = o.scheme
         self.connect(host,port)
-        if scheme == 'http':
-            request = f'GET {path} HTTP/1.1\r\n'
-        elif scheme == 'https':
-            request = f'GET {path} HTTP/1.1\r\n'
+        request = f'GET {path} HTTP/1.1\r\n'
         request += f'HOST: {host}:{port}\r\n'
         request += '\r\n'
-        print(request)
         self.socket.send(request.encode('utf-8'))
         results_txt = self.recvall(self.socket)
         self.close()
-        if type(results_txt) == dict:
-            return self.GET(results_txt['url'])
         parse_result = self.__parse_server_response(results_txt)
         code = int(parse_result['heads'][0].split()[1])
+        print(parse_result['heads'])
         body = parse_result['body']
+        print(body)
         return HTTPResponse(code, body)
 
     def POST(self, url, args=None):
@@ -137,6 +132,7 @@ class HTTPClient(object):
             return self.GET( url, args )
         
     def __parse_server_response(self, response:str) -> dict:
+        # parse server response to get header lines and content
         header_end = response.find('\r\n\r\n')
         headers = response[:header_end]
         content = response[header_end + 4:]
