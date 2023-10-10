@@ -55,17 +55,17 @@ class HTTPClient(object):
         while not done:
             part = sock.recv(BYTES_TO_READ)
             print(part)
-            code = self.__parse_server_response(part.decode('utf-8'))['heads'][0].split()[1]
-            if int(code) == 301:
-                part = part.decode('utf-8')
-                part = part.split('\r\n')
-                for line in part:
-                    if line.startswith("Location: "):
-                        new_location = line[len("Location: "):]
-                        handle_301['has_301'] = True
-                        handle_301['url'] = new_location
-                        self.close()
-                        return handle_301
+            # code = self.__parse_server_response(part.decode('utf-8'))['heads'][0].split()[1]
+            # if int(code) == 301:
+            #     part = part.decode('utf-8')
+            #     part = part.split('\r\n')
+            #     for line in part:
+            #         if line.startswith("Location: "):
+            #             new_location = line[len("Location: "):]
+            #             handle_301['has_301'] = True
+            #             handle_301['url'] = new_location
+            #             self.close()
+            #             return handle_301
             if (part):
                 buffer.extend(part)
             else:
@@ -82,16 +82,11 @@ class HTTPClient(object):
         if scheme == 'http':
             request = f'GET {path} HTTP/1.1\r\n'
         elif scheme == 'https':
-            context = ssl.create_default_context()
-            ssl_socket = context.wrap_socket(self.socket, server_hostname=host)
             request = f'GET {path} HTTP/1.1\r\n'
         request += f'HOST: {host}:{port}\r\n'
         request += '\r\n'
         print(request)
-        if scheme == 'https':
-            ssl_socket.send(request.encode('utf-8'))
-        elif scheme == 'http':
-            self.socket.send(request.encode('utf-8'))
+        self.socket.send(request.encode('utf-8'))
         results_txt = self.recvall(self.socket)
         self.close()
         if type(results_txt) == dict:
