@@ -123,6 +123,8 @@ class HTTPClient(object):
         parse_result = self.__parse_server_response(results_txt)
         code = int(parse_result['heads'][0].split()[1])
         body = parse_result['body']
+        print(parse_result['heads'])
+        print(body)
         return HTTPResponse(code, body)
 
     def command(self, url, command="GET", args=None):
